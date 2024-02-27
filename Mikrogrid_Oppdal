@@ -1,0 +1,209 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+"Load data"
+Esol = np.load('Soldata_Oppdal.csv.npy') #Energiproduksjon per time for sol: Esol = Panelareal * virkningsgrad * solinnstråling
+Pvind = np.load('Oppdal_vind.csv.npy') #Energiproduksjon per time for vind: Pvind = 
+Esol = Esol[0:8760]
+Pvind = Pvind[0:8760]
+
+#Pvind = np.load('Oslo_EprodVind.npy') #Energiproduksjon per time
+Forbruk_C1 = np.load('Oppdal_ForbrukC1.npy') #Energiforbruk for scenario 1
+Forbruk_C2 = np.load('Oppdal_ForbrukC2.npy') #Energiforbruk for scenario 2
+Forbruk_C3 = np.load('Oppdal_ForbrukC3.npy') #Energiforbruk for scenario 3
+Wbesp13 = np.load('Oppdal_Besparelse13.npy')
+Wbesp12 = np.load('Oppdal_besparelse12.npy')
+
+
+"Energiberegninger"
+#Energibesparelse ved å installere varmepumpe (forskjellen mellom scenario 1 og 2)
+Besparelse_12 = sum(Wbesp12)
+
+#Netto strømproduksjon 
+strøm_produksjon = np.array(Esol) + np.array(Pvind)
+
+#Netto energiforbruk (forbruk minus egenproduksjon)
+# Scenario 1
+netto_energiforbruk_1 = np.array(Forbruk_C1) - np.array(strøm_produksjon) # summerer alle punktene til energiforbruket (8760 punkt)
+
+# Scenario 2
+netto_energiforbruk_2 = np.array(Forbruk_C2) - np.array(strøm_produksjon) # summerer alle punktene til energiforbruket (8760 punkt)
+
+# Scenario 3
+netto_energiforbruk_3 = np.array(Forbruk_C3) - np.array(strøm_produksjon) # summerer alle punktene til energiforbruket (8760 punkt)
+
+
+#Beregn netto strømproduksjon
+total_strømproduksjon = sum(strøm_produksjon) / 1000   #Fra Wh til kWh
+print(f'Total strømproduksjon for ett år (Oppdal): {round(total_strømproduksjon, 2)} kWh')
+
+#finner de negative og positive verdiene og henter de ut, lagrer disse som en liste for å så summere disse verdiene for å kunne se hvor mye man kan selge eller man må kjøpe
+#For scenario 1 kan man også selge strøm, fordi det ikke trenger noe særlig oppvarming på sommeren
+# Finn indeksene der strømforbruket er større enn 0 for de 3 scenarioene 
+indekser_1 = np.where(netto_energiforbruk_1 > 0)  
+indekser_2 = np.where(netto_energiforbruk_2 > 0) 
+indekser_3 = np.where(netto_energiforbruk_3 > 0) 
+
+# Finn indeksene der strømforbruket er mindre enn 0 for de 3 scenarioene 
+indekser_negativ_1 = np.where(netto_energiforbruk_1 < 0)  
+indekser_negativ_2 = np.where(netto_energiforbruk_2 < 0) 
+indekser_negativ_3 = np.where(netto_energiforbruk_3 < 0) 
+
+# Beregning av totalt kjøpt energi (positivt netto energiforbruk)
+totalt_kjøpt_energi_1 = sum(netto_energiforbruk_1[indekser_1])/1000  # Scenario 1 #Fra Wh til kWh
+totalt_kjøpt_energi_2 = sum(netto_energiforbruk_2[indekser_2])/1000  # Scenario 2
+totalt_kjøpt_energi_3 = sum(netto_energiforbruk_3[indekser_3])/1000  # Scenario 3
+
+# Beregning av totalt solgt energi (positivt netto energiforbruk)
+totalt_solgt_energi_1 = sum(netto_energiforbruk_1[indekser_negativ_1])/1000*(-1)  # Scenario 1 #henter ut de negative verdiene, *(-1) for å ikke få med minus
+totalt_solgt_energi_2 = sum(netto_energiforbruk_2[indekser_negativ_2])/1000*(-1)  # Scenario 2
+totalt_solgt_energi_3 = sum(netto_energiforbruk_3[indekser_negativ_3])/1000*(-1)  # Scenario 3
+
+# Skriv ut resultatene
+print("Totalt energi som må kjøpes for Scenario 1:", round(totalt_kjøpt_energi_1), "kWh")
+print("Totalt energi som må kjøpes for Scenario 2:", round(totalt_kjøpt_energi_2), "kWh")
+print("Totalt energi som må kjøpes for Scenario 3:", round(totalt_kjøpt_energi_3), "kWh")
+
+print("Totalt energi som kan selges for Scenario 1:", round(totalt_solgt_energi_1), "kWh")
+print("Totalt energi som kan selges for Scenario 2:", round(totalt_solgt_energi_2), "kWh")
+print("Totalt energi som kan selges for Scenario 3:", round(totalt_solgt_energi_3), "kWh")
+
+
+" Variabelt antall solceller" 
+"Plotting "
+#10m^2 solceller produserer:
+produksjon_10_celle = sum(Esol)/1000 #kWh fra solceller
+antall_solceller = (sum(Forbruk_C3)/1000)/produksjon_10_celle #gjør om til kWh, dele på strøm produkjson fra sol
+print("For scenario 3 er det årlige forbruket",round(sum(Forbruk_C3)/1000),"kWh og vi trenger", round(antall_solceller)*10,"m^2 solceller for å dekke dette energibehovet") #*med 10 (1 solcelle var 10m^2) får antall m^2
+
+"Variabelt antall vindturbiner"
+"Plotting"
+produksjon_1_vindturbin = sum(Pvind)/1000
+antall_turbiner = (sum(Forbruk_C3)/1000)/produksjon_1_vindturbin
+print("For scenario 3 er det årlige forbruket", round(sum(Forbruk_C3)/1000),"kWh og vi trenger", round(antall_turbiner)," vindturbiner for å dekke dette energibehovet") 
+
+
+"Kostnader"
+t = np.arange(1, 8761)  # Oppretter en vektor fra 1 til 8760
+pris_strøm = 0.68 + 0.15 * np.cos((2 * np.pi * t / 8760) - (np.pi / 8)) #kr/kWh
+pris_nett = 0.65 - 0.15 * np.cos(2*np.pi*t/8760) #kr/kWh
+
+netto_strømpris = pris_strøm + pris_nett
+salgspris = np.sqrt(pris_strøm/(sum(pris_strøm)/8760)) #kr/kWh
+
+
+#Fra vektoren med netto strømforbruk, bruk alle verdier > 0 sammen med netto strømpris til  å beregne  årlig 
+#kostnad for kjøp av strøm for alle scenarier og de to valgte plasseringene.
+
+# Beregn årlig kostnad for kjøp av strøm
+årlig_kostnad_1 = sum(netto_energiforbruk_1[indekser_1]/1000 * netto_strømpris[indekser_1])  # gjør om Wh til kWh, ganger kWh med kr/kWh for å beregne årlige kostnader
+årlig_kostnad_2 = sum(netto_energiforbruk_2[indekser_2]/1000 * netto_strømpris[indekser_2])  # gjør om Wh til kWh, ganger kWh med kr/kWh for å beregne årlige kostnader
+årlig_kostnad_3 = sum(netto_energiforbruk_3[indekser_3]/1000 * netto_strømpris[indekser_3])  # gjør om Wh til kWh, ganger kWh med kr/kWh for å beregne årlige kostnader
+
+print("Årlig kostnad for kjøp av strøm:", round(årlig_kostnad_1),"Kr")
+print("Årlig kostnad for kjøp av strøm:", round(årlig_kostnad_2),"Kr")
+print("Årlig kostnad for kjøp av strøm:", round(årlig_kostnad_3),"Kr")
+
+#Fra vektoren med netto strømforbruk, bruk alle verdier <0 sammen med salgspris til
+#å beregne  årlig inntekt ved salg av strøm for alle scenarier og de to valgte plasseringene
+
+årlig_inntekt_1 = sum(netto_energiforbruk_1[indekser_negativ_1]/1000 * netto_strømpris[indekser_negativ_1])*(-1)  # gjør om Wh til kWh, ganger kWh med kr/kWh for å beregne årlige kostnader
+årlig_inntekt_2 = sum(netto_energiforbruk_2[indekser_negativ_2]/1000 * netto_strømpris[indekser_negativ_2])*(-1)   # gjør om Wh til kWh, ganger kWh med kr/kWh for å beregne årlige kostnader
+årlig_inntekt_3 = sum(netto_energiforbruk_3[indekser_negativ_3]/1000 * netto_strømpris[indekser_negativ_3])*(-1)   # gjør om Wh til kWh, ganger kWh med kr/kWh for å beregne årlige kostnader
+
+print("Årlig inntekt ved salg av strøm for scenario 1 er", round(årlig_inntekt_1),"Kr")
+print("Årlig inntekt ved salg av strøm for scenario 2 er", round(årlig_inntekt_2),"Kr")
+print("Årlig inntekt ved salg av strøm for scenario 3 er", round(årlig_inntekt_3),"Kr")
+
+#Bruk energibesparelse ved å installere varmepumpe sammen med strømprisen til  
+#å beregne  årlig kostnadsbesparelse ved installasjonen.
+kostnadsbesparelse_pumpe = round(årlig_kostnad_1 - årlig_kostnad_2) #summen av energi spart ved innstallasjon av varmepumpe * strømpris
+print("Årlig kostnadsbesparelse ved installasjon av varmepunpe er", (kostnadsbesparelse_pumpe), "Kr")
+#Skal egt bruke energibesparelsesveridene her
+
+#skal det være 12 eller 13 på oppgaven over???? kostnader, oppgave 5
+
+
+#Beregn  årlig besparelse ved installasjon av 1 vindturbin ved hjelp av energiproduksjonen og strømprisen (anta ingen salg av strøm).
+netto_energiforbruk_vind = np.array(Forbruk_C3) - np.array(Pvind)
+indekser_vind = np.where(netto_energiforbruk_vind > 0) 
+årlig_kostnadsbesparelse_vindturbin = sum(netto_energiforbruk_vind[indekser_3]/1000 * pris_strøm[indekser_3]) #Henter ut verdier der vi forbruker
+print("Årlig besparelse ved installasjon av én vindturbin for scenario 3:", round(årlig_kostnadsbesparelse_vindturbin), "Kr")
+
+#Beregn  årlig besparelse ved installasjon av 10 m2 solceller ved hjelp av energiproduksjonen og strømprisen (anta ingen salg av strøm).
+netto_energiforbruk_sol = np.array(Forbruk_C3) - np.array(Esol)
+indekser_sol = np.where(netto_energiforbruk_sol > 0) 
+årlig_kostnadsbesparelse_solenergi = sum(netto_energiforbruk_sol[indekser_3]/1000 * pris_strøm[indekser_3]) #Henter ut verdier der vi forbruker
+print("Årlig besparelse ved installasjon av 10m^2 solceller for scenario 3:", round(årlig_kostnadsbesparelse_solenergi), "Kr")
+
+
+"Nåverdi"
+# N = levetid
+# I = investeringskostnader
+#V = vedlikeholdskostnad
+N_sol = 30 #år
+N_vind = 15 #år
+N_pumpe = 12 #år
+I_sol = 2000 #kr/m^2
+I_vindturbin = 50000 # Kr/turbin
+I_pumpe = 9000 #Kr
+V_sol = 30 #Kr/år/m^2
+V_vindturbin = 200 # Kr/år/turbin
+V_pumpe = 250 #Kr/år
+r = 0.07 #rente
+
+NV_vindtubin = -I_vindturbin - V_vindturbin * ((1 - (1+r)**(-N_vind)) / r) + (årlig_kostnadsbesparelse_vindturbin * (1 - (1+r)**(-N_vind))/r)
+NV_sol = -I_sol - V_sol * ((1 - (1+r)**(-N_sol)) / r) + (årlig_kostnadsbesparelse_solenergi * (1 - (1+r)**(-N_sol))/r)
+NV_pumpe = -I_pumpe - V_pumpe * ((1 - (1+r)**(-N_pumpe)) / r) + (kostnadsbesparelse_pumpe * (1 - (1+r)**(-N_pumpe))/r)
+if NV_vindtubin > 0:
+    print("Installasjon av vindturbin er lønnsomt og nåverdien er:", round((NV_vindtubin)))
+else:
+    print("Innstillasjonen av vindturbin er ikke lønnsom fordi nåverdien er:", round((NV_vindtubin)))
+
+if NV_sol > 0:
+    print("Installasjon av solcellepanel er lønnsomt og nåverdien er:", round((NV_sol)))
+else:
+    print("Innstillasjonen av solcellepanel er ikke lønnsom fordi nåverdien er:", round((NV_sol)))
+
+if NV_pumpe > 0:
+    print("Installasjon av varmepumpe er lønnsomt og nåverdien er:", round((NV_pumpe)))
+else:
+    print("Innstillasjonen av varmepumpe er ikke lønnsom fordi nåverdien er:", round((NV_pumpe)))
+    
+
+"Klimagass"
+P_vind = 0.48 #kW/turbin
+P_sol = 3.0 #kW/10^m
+P_pumpe = 4.0 #kW
+
+K_CO2_NO = 18.9/1000 #kgCO2/kWh utslipp norsk kraftproduksjon
+K_CO2_EU = 300/1000 #kgCO2/kWh utslipp europeisk kraftproduksjon
+k_sol = 7000 #kgCO2/kW ved produksjon/installasjon av solceller
+k_vind = 700 #kgCO2/kW ved produksjon/installasjon av vindturbin
+k_pumpe = 1800 #kgCO2/kW ved produksjon/installasjon av varmepumpe
+N = 10 #år
+
+#Oppgave 1
+K_total_C1_NO = N * K_CO2_NO * sum(Forbruk_C1)/1000
+#Oppgave 2
+K_total_C1_EU = N * K_CO2_EU * sum(Forbruk_C1)/1000
+print(round(K_total_C1_NO))
+print("For scenario 1 med norskprodusert strøm vil det totale klimautslippet over 10 år være:", round(K_total_C1_NO), "Kg")
+print(round(K_total_C1_EU))
+print("For scenario 1 med europeisk-produsert strøm vil det totale klimautslippet over 10 år være:", round(K_total_C1_EU), "Kg")
+
+#Oppgave 3
+K_total_C3_NO = (k_vind * P_vind) + (k_sol * P_sol) + (k_pumpe * P_pumpe) + (N * K_CO2_NO * sum(netto_energiforbruk_3)/1000)
+print(round(K_total_C3_NO))
+print("For scenario 3 med norskprodusert strøm vil det totale klimautslippet over 10 år være:", round(K_total_C3_NO), "Kg")
+
+#Graf som viser hvordna utslippet vil endre seg over årene
+
+
+
+
+
+"Utslipp norsk strøm med mikrogrid"
+
+" Print or use the values as needed"
