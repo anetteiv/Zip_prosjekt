@@ -1,0 +1,161 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+
+#Importering av utetemperatur"
+Tuvec = np.load('temp.Oslo.csv.npy')
+
+
+def beregn_virkningsgrad(Tuvec):
+                eta0 = 0.2
+                T0 = 25
+                eta = eta0 + 0.3/100 *(T0-(Tuvec+20))
+                return eta
+
+
+def importere_soldata(filnavn):
+    # Leser CSV-filen og filtrerer basert på datostart
+    data = pd.read_csv(filnavn, delimiter=",", decimal='.', header=7)
+    data = data[data.iloc[:, 0].str.startswith("2020")]
+
+    # Fjerner ugyldige rader
+    data = data[~data.iloc[:, 0].str.contains('G(i)')]
+
+    # Henter ut tid, solinnstråling og temperaturdata
+    tvec = pd.to_datetime(data.iloc[:, 0], format='%Y%m%d:%H%M')  # Tid
+    g_i = pd.to_numeric(data.iloc[:, 1], errors='coerce')  # Solinnstråling (konverterer ugyldige verdier til NaN)
+    temperatur_data = data.iloc[:, 3].to_numpy() + 20.0  # Utetemperaturen + 20°C
+
+    return tvec, g_i, temperatur_data
+
+Tuvec_2 = np.load('temp.Oppdal.csv.npy')
+
+# Bruk funksjonen for begge stedene
+virkningsgrad_data_oslo = beregn_virkningsgrad(Tuvec)
+virkningsgrad_data_oppdal = beregn_virkningsgrad(Tuvec_2)
+
+
+def beregn_energiproduksjon(solinnstråling, virkningsgrad, panelareal):
+    # Konverter solinnstråling til energi (i Wh)
+    energiproduksjon = solinnstråling * virkningsgrad * panelareal
+
+    return energiproduksjon
+
+def hovedprogram():
+    # Leser data fra CSV-filene for Oslo og Oppdal
+    tidsvektor_oslo, solinnstråling_oslo, temperatur_data_oslo = importere_soldata('Soldata_Oslo.csv')
+    tidsvektor_oppdal, solinnstråling_oppdal, temperatur_data_oppdal = importere_soldata('Soldata_Oppdal.csv')
+
+    # Installerer solcellepanel med totalt areal 10 m2
+    panelareal = 10.0
+
+    # Beregn strømproduksjonen for hvert tidspunkt og total strømproduksjon for ett år for Oslo
+    virkningsgrad_data_oslo = beregn_virkningsgrad(temperatur_data_oslo)
+    energiproduksjon_per_time_oslo = beregn_energiproduksjon(solinnstråling_oslo, virkningsgrad_data_oslo, panelareal)
+    total_energiproduksjon_oslo = np.sum(energiproduksjon_per_time_oslo) / 10**3  # fra Wh til kWh
+
+    energiproduksjon_per_time_oslo = energiproduksjon_per_time_oslo[:8761]
+
+    # Beregn strømproduksjonen for hvert tidspunkt og total strømproduksjon for ett år for Oppdal
+    virkningsgrad_data_oppdal = beregn_virkningsgrad(temperatur_data_oppdal)
+    energiproduksjon_per_time_oppdal = beregn_energiproduksjon(solinnstråling_oppdal, virkningsgrad_data_oppdal, panelareal)
+    total_energiproduksjon_oppdal = np.sum(energiproduksjon_per_time_oppdal) / 10**3  # fra Wh til kWh
+
+    energiproduksjon_per_time_oppdal = energiproduksjon_per_time_oppdal[:8761]
+
+
+    # Lagre vektorene med timesvis strømproduksjon (8760 datapunkter)
+    np.savetxt('energiproduksjon_per_time_oslo.csv', energiproduksjon_per_time_oslo, delimiter=',')
+    np.savetxt('energiproduksjon_per_time_oppdal.csv', energiproduksjon_per_time_oppdal, delimiter=',')
+
+    print(f'Total strømproduksjon for ett år (Oslo): {round(total_energiproduksjon_oslo, 2)} kWh')
+    print(f'Total strømproduksjon for ett år (Oppdal): {round(total_energiproduksjon_oppdal, 2)} kWh')
+
+    # Legg til virkningsgraden som en ny kolonne i data for Oslo
+    gyldig_data_oslo = pd.DataFrame({'Tid': tidsvektor_oslo, 'Solinnstråling': solinnstråling_oslo, 'Temperatur': temperatur_data_oslo, 'Virkningsgrad': virkningsgrad_data_oslo})
+
+    # Resample dataene månedlig og beregn gjennomsnittet for Oslo
+    månedlig_gjennomsnitt_data_oslo = gyldig_data_oslo.resample('M', on='Tid').mean()
+
+    # Legg til kolonnen 'Energiproduksjon_månedlig' for Oslo
+    månedlig_gjennomsnitt_data_oslo['Solinnstråling_månedlig'] = månedlig_gjennomsnitt_data_oslo['Solinnstråling']
+    månedlig_gjennomsnitt_data_oslo['Virkningsgrad_månedlig'] = månedlig_gjennomsnitt_data_oslo['Virkningsgrad']
+    månedlig_gjennomsnitt_data_oslo['Energiproduksjon_månedlig'] = månedlig_gjennomsnitt_data_oslo['Solinnstråling_månedlig'] * månedlig_gjennomsnitt_data_oslo['Virkningsgrad_månedlig'] * panelareal / 1000  # fra kWh til MWh
+
+    # Legg til virkningsgraden som en ny kolonne i data for Oppdal
+    gyldig_data_oppdal = pd.DataFrame({'Tid': tidsvektor_oppdal, 'Solinnstråling': solinnstråling_oppdal, 'Temperatur': temperatur_data_oppdal, 'Virkningsgrad': virkningsgrad_data_oppdal})
+
+    # Resample dataene månedlig og beregn gjennomsnittet for Oppdal
+    månedlig_gjennomsnitt_data_oppdal = gyldig_data_oppdal.resample('M', on='Tid').mean()
+
+    # Legg til kolonnen 'Energiproduksjon_månedlig' for Oppdal
+    månedlig_gjennomsnitt_data_oppdal['Solinnstråling_månedlig'] = månedlig_gjennomsnitt_data_oppdal['Solinnstråling']
+    månedlig_gjennomsnitt_data_oppdal['Virkningsgrad_månedlig'] = månedlig_gjennomsnitt_data_oppdal['Virkningsgrad']
+    månedlig_gjennomsnitt_data_oppdal['Energiproduksjon_månedlig'] = månedlig_gjennomsnitt_data_oppdal['Solinnstråling_månedlig'] * månedlig_gjennomsnitt_data_oppdal['Virkningsgrad_månedlig'] * panelareal / 1000  # fra kWh til MWh
+
+    # Plot innstrålingsdataene som funksjon av månedene for Oslo og Oppdal
+    plt.figure(figsize=(12, 6))
+    plt.plot(månedlig_gjennomsnitt_data_oslo.index, månedlig_gjennomsnitt_data_oslo['Solinnstråling_månedlig'], label='Solinnstråling (Oslo)')
+    plt.plot(månedlig_gjennomsnitt_data_oppdal.index, månedlig_gjennomsnitt_data_oppdal['Solinnstråling_månedlig'], label='Solinnstråling (Oppdal)')
+    plt.xlabel('Tid', fontsize = 16)
+    plt.ylabel('Solinnstråling (W/m^2)', fontsize = 17)
+    plt.legend(fontsize = 14)
+    plt.title('Solinnstråling', fontsize = 18)
+    plt.xticks(fontsize=16)
+    plt.tick_params(axis='y', labelsize=16)
+    plt.show()
+    
+    plt.plot(gyldig_data_oppdal['Virkningsgrad'])
+    plt.show()
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+
+    color = 'red'
+    ax1.set_xlabel('Tid', fontsize = 16)
+    ax1.set_ylabel('Virkningsgrad (%)', color=color, fontsize = 17)
+    ax1.plot(månedlig_gjennomsnitt_data_oslo.index, månedlig_gjennomsnitt_data_oslo['Virkningsgrad_månedlig'], label='Virkningsgrad (Oslo)', color=color)
+    ax1.plot(månedlig_gjennomsnitt_data_oppdal.index, månedlig_gjennomsnitt_data_oppdal['Virkningsgrad_månedlig'], label='Virkningsgrad (Oppdal)', linestyle='dashed', color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+    plt.tick_params(axis='y', labelsize=16)
+
+    
+
+    ax2 = ax1.twinx()  
+    color = 'blue'
+    ax2.set_ylabel('Energiproduksjon (MWh)', color=color, fontsize = 17)  
+    ax2.plot(månedlig_gjennomsnitt_data_oslo.index, månedlig_gjennomsnitt_data_oslo['Energiproduksjon_månedlig'], label='Energiproduksjon (Oslo)', color=color)
+    ax2.plot(månedlig_gjennomsnitt_data_oppdal.index, månedlig_gjennomsnitt_data_oppdal['Energiproduksjon_månedlig'], label='Energiproduksjon (Oppdal)', linestyle='dashed', color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    plt.tick_params(axis='y', labelsize=16)
+
+
+    ax1.set_xticklabels(ax1.get_xticklabels(), fontsize=16)
+
+    # Legg til en liten boks i hjørnet
+    info_text = 'Linjer: Oslo\nStiplede linjer: Oppdal'
+    bbox_props = dict(boxstyle="round,pad=0.3", facecolor="lightgrey", alpha=0.5)
+    ax1.text(0.60, 0.95, info_text, transform=ax1.transAxes, fontsize=14, verticalalignment='top', bbox=bbox_props)
+
+
+    plt.title('Virkningsgrad og Energiproduksjon', fontsize = 18)
+    plt.show()
+    
+    return energiproduksjon_per_time_oslo, energiproduksjon_per_time_oppdal
+
+
+if __name__ == "__main__":
+    energiproduksjon_per_time_oslo, energiproduksjon_per_time_oppdal = hovedprogram()
+    np.save('Soldata_Oslo.csv.npy', energiproduksjon_per_time_oslo)
+    np.save('Soldata_Oppdal.csv.npy', energiproduksjon_per_time_oppdal)
+
+
+#print(energiproduksjon_per_time_oslo)
+print(sum(energiproduksjon_per_time_oslo)/1000)
+print(sum(energiproduksjon_per_time_oppdal)/1000)
+    
+    
+    
+    
+    
+    
