@@ -1,0 +1,130 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+ 
+"""Effektberegning"""
+vref = np.arange(31)
+Pref = np.array([0,0,0,20,50,90,165,270,360,410,540,720,760,775,780,780,780,780,780,780,780,780,780,780,780,780,0,0,0,0,0])
+ 
+Asveip = 2.27 #sveipearealet
+rho = 1.24 #tetthet luft 25C, kg/m3
+virkningsgrad = (2*Pref)/(rho*Asveip*vref**3)
+ 
+ 
+fig, ax1 = plt.subplots()
+ 
+# For effekt fra Pref
+ax1.plot(vref, Pref, marker='o', label='Effekt')
+ax1.set_xlabel('Vindhastighet (m/s)', fontsize=16)
+ax1.set_ylabel('Effekt (W)', color='tab:blue',fontsize=16)
+ax1.tick_params(axis='y', labelcolor='tab:blue')
+ 
+# for virkningsgraden
+ax2 = ax1.twinx()
+ax2.plot(vref, virkningsgrad, linestyle='--', color='tab:red', label='Virkningsgrad')
+ax2.set_ylabel('Virkningsgrad', color='tab:red',fontsize=16)
+ax2.tick_params(axis='y', labelcolor='tab:red')
+ 
+plt.title('Effekt og irkningsgrad til vindhastighet', fontsize=18)
+plt.grid(True)
+plt.show()
+ 
+"""Importering """
+def f_vindhastighet_import(filnavn):
+   data = pd.read_csv(filnavn, delimiter=";", decimal=",",header=0)
+   dato = pd.to_datetime(data.iloc[0:8760, 2].astype(str), format='%d.%m.%Y %H:%M').to_numpy()
+   vind_O = data.iloc[0:8760, 3].astype(float).to_numpy()
+   return dato, vind_O
+ 
+dato_oppdal, vind_oppdal = (f_vindhastighet_import("Oppdal_vind20.csv"))
+dato_oslo, vind_oslo = (f_vindhastighet_import("Oslo_vind20.csv"))
+ 
+ 
+"""Interpolering 1 (for å få opp liste med tid)"""
+ 
+def interpolasjon(dato,vind):
+   Pv = pd.DataFrame({"Dato":dato,"Strømprod":np.interp(vind, vref, Pref)})
+   Pv_u = Pv.loc[(Pv["Dato"] <= "31.12.2020 23:59")]
+   return Pv_u
+ 
+Pv_opp = interpolasjon(dato_oppdal, vind_oppdal)
+Pv_os = interpolasjon(dato_oslo,vind_oslo)
+ 
+print("oppdal", Pv_opp)
+print("oslo", Pv_os)
+ 
+"""Interpolering 2 (bruker denne)"""
+ 
+Pvind_opp = np.interp(vind_oppdal, vref, Pref)/1000
+np.save("Oppdal_vind20.csv",Pvind_opp)
+Ptot_opp = np.sum(Pvind_opp) #kWh/år
+ 
+Pvind_os = np.interp(vind_oslo, vref, Pref)/1000
+np.save("Oslo_vind20.csv",Pvind_os)
+Ptot_os = np.sum(Pvind_os) #kWh/år
+ 
+ 
+print("Total Effekt Oppdal:",round(sum(Pvind_opp),2))
+print("Total Effekt Oslo:",round(sum(Pvind_os),2))
+ 
+ 
+"""Månedlig beregning"""
+ 
+import numpy as np
+ 
+def månedlig_snitt(data):
+    snitt = []
+    for i in range(1, 13):
+        p = int((i - 1) * 8760 / 12)
+        q = int(i * 8760 / 12)
+        Månedligdata = data[p:q]
+        snitt.append(np.mean(Månedligdata))
+    return snitt
+ 
+ 
+# Plot månedlige gjennomsnitt for vindhastighet i Oppdal og Oslo
+plt.figure(figsize=(10, 6))
+plt.plot(månedlig_snitt(vind_oppdal), marker='o', label='Oppdal')
+plt.plot(månedlig_snitt(vind_oslo), marker='o', label='Oslo')
+ 
+ 
+plt.xlabel('Måned',fontsize=18)
+plt.ylabel('Gjennomsnittlig vindhastighet (m/s)',fontsize=18)
+plt.title('Månedlig gjennomsnittlig vindhastighet i Oppdal og Oslo',fontsize=18)
+plt.xticks(range(12), ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'],fontsize=13)
+plt.grid(True)
+plt.legend(loc='upper left')
+plt.show()
+ 
+ 
+def månedlig_summen(data):
+    summen = []
+    for i in range(1, 13):
+        p = int((i - 1) * 8760 / 12)
+        q = int(i * 8760 / 12)
+        Månedligdata = data[p:q]
+        summen.append(np.sum(Månedligdata))
+    return summen
+ 
+# Plot månedlige summer for vindhastighet i Oppdal og Oslo
+plt.figure(figsize=(10, 6))
+plt.plot(månedlig_summen(Pvind_opp), linestyle='--', color='tab:blue', label='Sum Oppdal')
+plt.plot(månedlig_summen(Pvind_os), linestyle='--', color='tab:orange', label='Sum Oslo')
+ 
+ 
+plt.xlabel('Måned',fontsize=18)
+plt.ylabel('Månedlig strømproduksjon (kWh)',fontsize=18)
+plt.title('Månedlig strømproduksjon for Oppdal og Oslo',fontsize=18)
+plt.xticks(range(12), ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'],fontsize=13)
+plt.grid(True)
+plt.legend(loc='upper left')
+plt.show()
+ 
+ 
+""" kapasitets faktor """
+ 
+kapfaktor_opp = sum(Pvind_opp)/(0.780*8760)   #780 watt = 0.780kW
+kapfaktor_os = sum(Pvind_os)/(0.780*8760)
+ 
+print("Kapasitetsfaktor oppdal = ",kapfaktor_opp)
+print("Kapasitetsfaktor oslo = ",kapfaktor_os)
